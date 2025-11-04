@@ -22,33 +22,47 @@ class Matches:
         half_window = window_size // 2
         height, width = left_gray.shape
         matches = []
+
+        # Für jeden Keypoint im linken Bild
         for pt1 in keypoints_left:
             x1, y1 = int(round(pt1[0])), int(round(pt1[1]))
 
+            # Prüfen, ob das Fenster um den Keypoint im Bild liegt
             if (x1 - half_window < 0 or x1 + half_window >= width 
                 or y1 - half_window < 0 or y1 + half_window >= height):
                 continue
 
+            # Patch (Fenster) um den Keypoint im linken Bild extrahieren
             patch_left = left_gray[y1 - half_window:y1 + half_window + 1, 
                                    x1 - half_window:x1 + half_window + 1]
             
             best_score = float('inf')
             best_pt2 = None
+
+            # Suche passenden Keypoint im rechten Bild (gleiche y-Koordinate)
             for pt2 in keypoints_right:
                 x2, y2 = int(round(pt2[0])), int(round(pt2[1]))
 
-                if y2 != y1:
+                # Nur Keypoints auf gleicher Zeile vergleichen (Epipolarannahme)
+                if abs(y2 != y1) > 0:
                     continue
                 if x2 - half_window < 0 or x2 + half_window >= width:
                     continue
+
+                # Patch im rechten Bild extrahieren
                 patch_right = right_gray[y2 - half_window:y2 + half_window + 1,
                                          x2 - half_window:x2 + half_window + 1]
+                
+                # SSD (Sum of Squared Differences) berechnen
+                if patch_left.shape != patch_right.shape:
+                    continue
                 
                 ssd = np.sum((patch_left.astype(np.float32) - patch_right.astype(np.float32)) ** 2)
                 if ssd < best_score:
                     best_score = ssd
                     best_pt2 = (x2, y2)
 
+            # Bestes Match speichern, falls gefunden
             if best_pt2 is not None:
                 matches.append(((x1, y1), best_pt2))
 
@@ -61,7 +75,7 @@ class Matches:
         
         # ToDo: Filtering Extrema
         
-        # Dummy: Remove last 10% as fake extrema
+        # Dummy: Entfernt die letzten 10% als "Extrema"
         n = len(matches)
         n_extrema = max(1, n // 10)
         
@@ -74,7 +88,7 @@ class Matches:
         matches: list[tuple[tuple[int, int], tuple[int, int]]],
         extrema: list[tuple[tuple[int, int], tuple[int, int]]],
     ) -> list[tuple[tuple[int, int], tuple[int, int]]]:
-        # Add extrema back to matches
+        # Fügt die Extrema wieder zu den Matches hinzu
         return matches + extrema
 
     @staticmethod
@@ -82,17 +96,23 @@ class Matches:
         img_left: np.ndarray,
         img_right: np.ndarray,
         matches: list[tuple[tuple[int, int], tuple[int, int]]],
-        line_color: tuple[int, int, int] = (0, 200, 200)
+        line_color: tuple[int, int, int] = (0, 200, 200),
+        alpha: float = 0.5  # Transparenzfaktor (0=unsichtbar, 1=voll sichtbar)
     ) -> np.ndarray: 
-        # Visualize lines of tuples for matching features.
+        # Visualisiert die Matches als Linien zwischen den Bildern
         height = max(img_left.shape[0], img_right.shape[0])
         left_width, right_width = img_left.shape[1], img_right.shape[1]
         vis = np.zeros((height, left_width + right_width, 3), dtype=np.uint8)
         vis[:img_left.shape[0], :left_width] = img_left
         vis[:img_right.shape[0], left_width:left_width + right_width] = img_right
 
+        # Line Overlay for matches
+        overlay = vis.copy()
         for (x1, y1), (x2, y2) in matches:
             pt1 = (x1, y1)
             pt2 = (x2 + left_width, y2)
-            cv2.line(vis, pt1, pt2, line_color, 1, lineType=cv2.LINE_AA)
+            cv2.line(overlay, pt1, pt2, line_color, 1)
+
+        # Blending
+        vis = cv2.addWeighted(overlay, alpha, vis, 1 - alpha, 0)
         return vis

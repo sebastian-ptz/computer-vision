@@ -51,6 +51,17 @@ class ComputerVisionGUI(QWidget):
         self.max_corners_input.setFixedWidth(60)
         self.max_corners_input.setValidator(QIntValidator(1, 50000, self))
 
+        self.max_matches_input = QLineEdit("200")
+        self.max_matches_input.setFixedWidth(60)
+        self.max_matches_input.setValidator(QIntValidator(1, 10000, self))
+        self._last_max_matches = 200
+
+        # Alpha input for transparency
+        self.alpha_input = QLineEdit("0.5")
+        self.alpha_input.setFixedWidth(60)
+        from PySide6.QtGui import QDoubleValidator
+        self.alpha_input.setValidator(QDoubleValidator(0.0, 1.0, 2, self))
+
         self.radio_trace = QRadioButton("Edges")
         self.radio_features = QRadioButton("Features")
         self.radio_matches = QRadioButton("Matches")
@@ -59,15 +70,18 @@ class ComputerVisionGUI(QWidget):
         self.checkbox_remove_extrema.setChecked(False)
         self.checkbox_remove_extrema.stateChanged.connect(self._on_control_changed)
 
-        # Connect to a single handler
+        # Connect signals
         self.radio_trace.toggled.connect(self._on_control_changed)
         self.radio_features.toggled.connect(self._on_control_changed)
         self.radio_matches.toggled.connect(self._on_control_changed)
         self.max_corners_input.returnPressed.connect(self._on_control_changed)
+        self.max_matches_input.returnPressed.connect(self._on_control_changed)
+        self.alpha_input.returnPressed.connect(self._on_control_changed)
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self.manager.handle_control_change()
+
 
     def _setup_layouts(self):
         imgs = QHBoxLayout()
@@ -75,8 +89,22 @@ class ComputerVisionGUI(QWidget):
         imgs.addWidget(self.left_widget, alignment=Qt.AlignRight)
         imgs.addWidget(self.right_widget, alignment=Qt.AlignLeft)
 
-        form = QFormLayout()
-        form.addRow("Corners:", self.max_corners_input)
+
+        input_row = QHBoxLayout()
+        input_row.setAlignment(Qt.AlignHCenter)
+        input_row.setSpacing(8)
+        label_corners = QLabel("Corners:")
+        label_corners.setFixedWidth(60)
+        input_row.addWidget(label_corners)
+        input_row.addWidget(self.max_corners_input)
+        label_matches = QLabel("Matches:")
+        label_matches.setFixedWidth(60)
+        input_row.addWidget(label_matches)
+        input_row.addWidget(self.max_matches_input)
+        label_alpha = QLabel("Alpha:")
+        label_alpha.setFixedWidth(50)
+        input_row.addWidget(label_alpha)
+        input_row.addWidget(self.alpha_input)
 
         radio_layout = QHBoxLayout()
         radio_layout.setAlignment(Qt.AlignHCenter)
@@ -89,8 +117,21 @@ class ComputerVisionGUI(QWidget):
         layout = QVBoxLayout(self)
         layout.setMenuBar(self.menu_bar)
         layout.addLayout(imgs, stretch=1)
-        layout.addLayout(form)
+        layout.addLayout(input_row)
         layout.addLayout(radio_layout)
+    def _get_alpha(self):
+        try:
+            val = float(self.alpha_input.text())
+            return min(max(val, 0.0), 1.0)
+        except Exception:
+            return 0.5
+
+    def _get_max_matches(self):
+        try:
+            val = int(self.max_matches_input.text())
+            return val if val > 0 else 200
+        except Exception:
+            return 200
 
     # Events 
     def _on_control_changed(self, *args, **kwargs):
